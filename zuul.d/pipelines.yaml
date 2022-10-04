@@ -1,0 +1,142 @@
+- pipeline:
+    name: check
+    description: |
+      Newly uploaded patchsets enter this pipeline to receive an
+      initial +/-1 Verified vote.
+    manager: independent
+    precedence: normal
+    require:
+      gitlab:
+        open: true
+    trigger:
+      gitlab:
+        - event: gl_merge_request
+          action: comment
+          comment: (?i)^\s*recheck\s*$
+        - event: gl_merge_request
+          action:
+            - opened
+            - changed
+    success:
+      gitlab:
+        comment: true
+        approval: true
+    failure:
+      gitlab:
+        comment: true
+        approval: false
+    start:
+      gitlab:
+        comment: true
+        approval: false
+
+- pipeline:
+    name: gate
+    description: |
+      Changes that have been approved are enqueued in order in this
+      pipeline, and if they pass tests, will be merged. For
+      documentation on how gating with Zuul works, please see
+      https://zuul-ci.org/docs/zuul/latest/gating.html
+    manager: dependent
+    precedence: high
+    supercedes: check
+    post-review: True
+    require:
+      gitlab:
+        approved: true
+        open: true
+        labels:
+          - gate
+    trigger:
+      gitlab:
+        - event: gl_merge_request
+          action:
+            - approved
+        - event: gl_merge_request
+          action:
+            - labeled
+          labels:
+            - gate
+    success:
+      gitlab:
+        comment: true
+        approval: true
+        merge: true
+    failure:
+      gitlab:
+        comment: true
+        approval: false
+    start:
+      gitlab:
+        comment: true
+        approval: false
+    window-floor: 20
+    window-increase-factor: 2
+
+- pipeline:
+    name: post
+    post-review: true
+    description: This pipeline runs jobs that operate after each change is merged.
+    manager: independent
+    precedence: low
+    trigger:
+      gitlab:
+        - event: gl_push
+          ref: ^refs/heads/.*$
+       
+- pipeline:
+    name: promote
+    description: |
+      This pipeline runs jobs that operate after each change is merged
+      in order to promote artifacts generated in the gate
+      pipeline.
+    manager: supercedent
+    precedence: high
+    post-review: True
+    require:
+      gitlab:
+        merged: true
+    trigger:
+       gitlab:
+         - event: gl_merge_request
+           action: merged
+    success:
+      gitlab:
+        comment: true
+    failure:
+      gitlab:
+        comment: true
+
+- pipeline:
+    name: release
+    description: |
+      When a commit is tagged as a release, this pipeline runs jobs
+      that publish archives and documentation.
+    manager: independent
+    precedence: high
+    post-review: True
+    trigger:
+      gitlab:
+        - event: gl_push
+          ref: ^refs/tags/[0-9]+(\.[0-9]+)*$
+
+- pipeline:
+    name: daily
+    post-review: true
+    description: Jobs in this queue are triggered on a timer.
+    manager: independent
+    precedence: low
+    trigger:
+      timer:
+        - time: '0 6 * * *'
+
+- pipeline:
+    name: tag
+    description: This pipeline runs jobs in response to any tag event.
+    manager: independent
+    precedence: high
+    post-review: True
+    trigger:
+      gitlab:
+        - event: gl_push
+          ref: ^refs/tags/.*$

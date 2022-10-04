@@ -1,0 +1,6 @@
+- project:
+    name: ^.*
+    # Attach every repo to the check pipeline so we can report invalid
+    # zuul.yaml files.
+    check:
+      jobs: []
